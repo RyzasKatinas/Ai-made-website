@@ -17,8 +17,8 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .card{position:relative;height:100%;scroll-snap-align:start;scroll-snap-stop:always;background:#000 center/cover;color:#fff;overflow:hidden}
 .card.ready{background-image:none!important}
 .media{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .45s}.card.ready .media{opacity:1}
-.media video{width:100%;height:100%;object-fit:contain}.media iframe{width:100%!important;height:auto!important;aspect-ratio:16/9;border:0;pointer-events:none}
-.tap{position:absolute;inset:0}.card.emb .tap{display:none}.card.emb .media iframe{pointer-events:auto}
+.media video{width:100%;height:100%;object-fit:contain}.media iframe{width:100%!important;height:100%!important;border:0;pointer-events:none}
+.bg{position:absolute;inset:-24px;background:center/cover;filter:blur(26px) brightness(.55);transform:translateZ(0)}.tap{position:absolute;inset:0}.pill{display:none;position:absolute;z-index:6;top:56px;left:50%;transform:translateX(-50%);background:#000b;color:#fff;border:1px solid #fff5;border-radius:99px;padding:6px 14px;cursor:pointer;align-items:center;gap:6px;white-space:nowrap}.pill.on{display:flex}.pill svg{width:18px;height:18px}.card.emb .tap{display:none}.card.emb .media iframe{pointer-events:auto;height:auto!important;aspect-ratio:16/9}
 .ld{position:absolute;inset:0;margin:auto}.card.ready .ld,.card.bad .ld{display:none}
 .spin{width:34px;height:34px;border:3px solid #fff4;border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(1turn)}}
 .msg{display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:#000a;text-align:center;padding:30px}.card.bad .msg{display:flex}
@@ -35,8 +35,8 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:10px 18px;cursor:pointer;text-decoration:none;display:inline-block}.btn.s{padding:6px 12px;background:var(--card);color:var(--fg);border:1px solid var(--bd)}
 .page{height:100%;overflow-y:auto;max-width:560px;margin:0 auto;padding:20px 16px}
 .mut{color:var(--mut)}.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--bd)}
-.stats{display:flex;gap:10px}.stats div{flex:1;background:var(--card);border-radius:12px;padding:12px;text-align:center}.stats b{display:block;font-size:20px}
-input,select{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:9px 10px;width:100%}.row input,.row select{width:auto;max-width:55%}input[type=checkbox]{width:20px;height:20px;accent-color:var(--acc)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stats div{background:var(--card);border-radius:12px;padding:12px;text-align:center}.stats b{display:block;font-size:20px}
+input,select,textarea{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:9px 10px;width:100%}.row input,.row select{width:auto;max-width:55%}input[type=checkbox]{width:20px;height:20px;accent-color:var(--acc)}
 .set .chip{background:var(--card);color:var(--fg)}.set .chip.on{background:var(--acc);color:#fff}
 #sheet,#modal{position:fixed;inset:0;z-index:50;display:none;background:#0008;align-items:flex-end;justify-content:center}#sheet.open,#modal.open{display:flex}#modal{align-items:center}
 .sh,.md{background:var(--bg);color:var(--fg);width:100%;max-width:460px;border-radius:18px 18px 0 0;max-height:75dvh;display:flex;flex-direction:column;padding:14px;animation:up .25s}
@@ -59,14 +59,14 @@ const ic=n=>`<svg class="i" viewBox="0 0 24 24">${IC[n]}</svg>`;
 const CATS=['comedy','gaming','science','technology','education','entertainment','nature','travel'];
 const LANGS={'en-US':'English','es-ES':'Español','fr-FR':'Français','de-DE':'Deutsch','pt-BR':'Português','ja-JP':'日本語'};
 const SRC={youtube:'YouTube',commons:'Wikimedia Commons',archive:'Internet Archive',pornhub:'Pornhub'};
-const DEF={theme:'dark',muted:true,autoplay:true,cats:[],lang:'en-US',history:true,maturity:'teen'};
+const DEF={theme:'dark',muted:false,autoplay:true,cats:[],lang:'en-US',history:true,maturity:'teen'};
 let prefs={...DEF,...JSON.parse(localStorage.rs_prefs||'{}')},token=localStorage.rs_token,user=null,exCat='all',F={};
 let seen=JSON.parse(sessionStorage.rs_seen||'[]');
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),3200)};
 async function api(p,o={}){
   const r=await fetch('/api'+p,{method:o.method||'GET',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:o.body?JSON.stringify(o.body):undefined});
   const j=await r.json().catch(()=>({}));
-  if(!r.ok&&j.banned&&token){token=null;user=null;delete localStorage.rs_token;toast(j.error)}
+  if(!r.ok&&j.banned&&token){token=null;user=null;delete localStorage.rs_token;renderNav();banned(j.error)}
   if(!r.ok)throw Object.assign(new Error(j.error||'Request failed ('+r.status+')'),{status:r.status});
   return j;
 }
@@ -74,6 +74,48 @@ function savePrefs(){localStorage.rs_prefs=JSON.stringify(prefs);document.docume
 const need=()=>user?true:(openAuth(),false);
 function setUser(r){if(r.token){token=r.token;localStorage.rs_token=token}user=r.user;if(user.prefs&&Object.keys(user.prefs).length){prefs={...DEF,...user.prefs};localStorage.rs_prefs=JSON.stringify(prefs)}document.documentElement.dataset.theme=prefs.theme}
 function logout(){token=null;user=null;delete localStorage.rs_token;delete sessionStorage.rs_18;toast('Logged out');route()}
+
+/* ---------- Dialogs (replace confirm/prompt, which many phone browsers block) ---------- */
+function dlg({title,body='',fields=[],ok='OK',cancel='Cancel'}){
+  return new Promise(res=>{
+    const m=$('#modal'),close=r=>{m.className='';m.innerHTML='';res(r)},today=new Date().toISOString().slice(0,10);
+    const fh=f=>{const o=(f.options||[]).map(x=>Array.isArray(x)?x:[x,x]),id='f_'+f.id;
+      if(f.type==='checkbox')return`<label class="row" style="border:0;padding:4px 0"><span>${esc(f.label)}</span><input type="checkbox" id="${id}"${f.value?' checked':''}></label>`;
+      const inp=f.type==='select'?`<select id="${id}">${o.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`
+        :f.type==='textarea'?`<textarea id="${id}" rows="3" maxlength="200"></textarea>`
+        :`<input id="${id}" type="${f.type||'text'}" value="${esc(f.value??'')}"${f.type==='date'?` max="${today}"`:''}>`;
+      return`<label class="mut" style="font-size:13px">${esc(f.label)}</label>${inp}`};
+    m.className='open';
+    m.innerHTML=`<div class="md"><h3 style="margin:0">${esc(title)}</h3>${body?`<p class="mut" style="margin:0">${esc(body)}</p>`:''}${fields.map(fh).join('')}<button class="btn" id="dk">${esc(ok)}</button>${cancel?`<button class="btn s" id="dc">${esc(cancel)}</button>`:''}</div>`;
+    $('#dk').onclick=()=>{const o={};fields.forEach(f=>{const e=$('#f_'+f.id);o[f.id]=f.type==='checkbox'?e.checked:e.value});close(o)};
+    if(cancel){$('#dc').onclick=()=>close(null);m.onclick=e=>{if(e.target===m)close(null)}}else m.onclick=null;
+  });
+}
+const ask=(title,ok='OK')=>dlg({title,ok}).then(Boolean);
+const banned=msg=>dlg({title:'Account banned',body:msg,ok:'OK',cancel:null});
+
+/* ---------- Sound (browsers only allow sound after you tap the page) ---------- */
+let gest=false;addEventListener('pointerdown',()=>{gest=true},{capture:true,once:true});
+const sound=()=>!prefs.muted&&(navigator.userActivation?navigator.userActivation.hasBeenActive:gest);
+function forced(on){const b=$('#unm');if(b)b.classList.toggle('on',!!on&&!prefs.muted)}
+
+/* ---------- 18+ flow: works for old accounts too (asks for birthday first) ---------- */
+async function adultFlow(){
+  const stale=()=>location.hash!=='#adult',back=()=>{location.hash='#home'};
+  $('#view').innerHTML='';
+  if(!user){openAuth();back();return}
+  if(user.adult_on&&sessionStorage.rs_18)return startFeed('adult');
+  if(!user.has_dob){
+    const r=await dlg({title:'Enter your birthday',body:'Needed for 18+ videos. It can only be set once.',fields:[{id:'bd',label:'Date of birth',type:'date'}],ok:'Save'});
+    if(stale())return;if(!r||!r.bd)return back();
+    try{user=(await api('/me',{method:'PUT',body:{birthday:r.bd}})).user}catch(e){toast(e.message);return back()}
+  }
+  if(!user.adult_ok){await dlg({title:'Not available',body:'18+ videos are only for accounts that are 18 or older.',ok:'OK',cancel:null});return back()}
+  const c=await dlg({title:'18+ content',body:'This section has sexually explicit videos from a third party. Continue only if you are 18 or older and it is legal where you live.',ok:'I’m 18 or older, continue',cancel:'Go back'});
+  if(stale())return;if(!c)return back();
+  try{if(!user.adult_on)user=(await api('/me',{method:'PUT',body:{adult:true}})).user}catch(e){toast(e.message);return back()}
+  sessionStorage.rs_18=1;renderNav();startFeed('adult');
+}
 
 /* ---------- Players (file video or YouTube iframe) ---------- */
 let ytP;const ytApi=()=>ytP||(ytP=new Promise(r=>{window.onYouTubeIframeAPIReady=r;const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)}));
@@ -83,9 +125,9 @@ function player(c,v,bar){
     let p,t,want=false,d;
     const pl={
       load(){if(d)return;d=document.createElement('div');box.appendChild(d);
-        ytApi().then(()=>{if(!d)return;p=new YT.Player(d,{videoId:v.src,playerVars:{controls:0,playsinline:1,rel:0,modestbranding:1,fs:0,disablekb:1,loop:1,playlist:v.src},events:{onReady:()=>{c.classList.add('ready');if(want)pl.play()},onError:()=>c.classList.add('bad')}})})},
+        ytApi().then(()=>{if(!d)return;p=new YT.Player(d,{videoId:v.src,playerVars:{mute:1,controls:0,playsinline:1,rel:0,modestbranding:1,fs:0,disablekb:1,loop:1,playlist:v.src},events:{onReady:()=>{c.classList.add('ready');if(want)pl.play()},onError:()=>c.classList.add('bad')}})})},
       unload(){clearInterval(t);try{p&&p.destroy()}catch{}p=null;d=null;box.innerHTML='';c.classList.remove('ready')},
-      play(){want=true;if(!p||!p.playVideo)return;prefs.muted?p.mute():p.unMute();p.playVideo();clearInterval(t);t=setInterval(()=>{try{bar.style.width=p.getCurrentTime()/(p.getDuration()||1)*100+'%'}catch{}},500)},
+      play(){want=true;if(!p||!p.playVideo)return;const snd=sound();snd?p.unMute():p.mute();forced(!snd);p.playVideo();clearInterval(t);t=setInterval(()=>{try{bar.style.width=p.getCurrentTime()/(p.getDuration()||1)*100+'%'}catch{}},500)},
       pause(){want=false;clearInterval(t);try{p&&p.pauseVideo&&p.pauseVideo()}catch{}},
       mute(m){try{p&&p.mute&&(m?p.mute():p.unMute())}catch{}},
       paused:()=>!want,retry(){pl.unload();pl.load()},fs(){(c.requestFullscreen||c.webkitRequestFullscreen||nofs).call(c)}};
@@ -101,11 +143,11 @@ function player(c,v,bar){
   }
   const el=document.createElement('video');Object.assign(el,{playsInline:true,loop:true,muted:true,preload:'auto'});box.appendChild(el);
   el.addEventListener('loadeddata',()=>c.classList.add('ready'));
-  el.addEventListener('loadedmetadata',()=>{el.style.objectFit=el.videoHeight>=el.videoWidth?'cover':'contain'});
+  el.addEventListener('loadedmetadata',()=>{el.style.objectFit=el.videoWidth/el.videoHeight<=0.9?'cover':'contain'});
   el.addEventListener('timeupdate',()=>{bar.style.width=el.currentTime/(el.duration||1)*100+'%'});
   el.addEventListener('error',()=>{if(el.getAttribute('src'))c.classList.add('bad')});
   return{load(){if(!el.getAttribute('src'))el.src=v.src},unload(){el.pause();el.removeAttribute('src');el.load();c.classList.remove('ready')},
-    play(){el.muted=prefs.muted;const r=el.play();r&&r.catch(()=>{el.muted=true;el.play().catch(()=>{})})},pause(){el.pause()},mute(m){el.muted=m},
+    play(){const snd=sound();el.muted=!snd;forced(!snd);const r=el.play();r&&r.catch(()=>{el.muted=true;forced(true);el.play().catch(()=>{})})},pause(){el.pause()},mute(m){el.muted=m},
     paused:()=>el.paused,retry(){el.src=v.src},fs(){(el.requestFullscreen||el.webkitRequestFullscreen||el.webkitEnterFullscreen||nofs).call(el)}};
 }
 
@@ -113,16 +155,18 @@ function player(c,v,bar){
 function stopFeed(){F.io&&F.io.disconnect();F.lo&&F.lo.disconnect();document.querySelectorAll('#feed .card').forEach(c=>c._pl&&c._pl.unload());F={}}
 function startFeed(kind){
   const ex=kind==='explore';
-  $('#view').innerHTML=`<div class="wrap"><div class="top">${ex?`<div class="chips">${['all','trending',...CATS].map(c=>`<button class="chip${c===exCat?' on':''}" data-c="${c}">${c[0].toUpperCase()+c.slice(1)}</button>`).join('')}</div>`:`<b>RandomScroll${kind==='adult'?' 18+':''}</b>`}<button class="ib" id="mute" aria-label="Mute or unmute">${ic(prefs.muted?'mute':'vol')}</button></div><div id="feed"></div><div class="empty" id="empty"><div class="spin"></div></div></div>`;
+  $('#view').innerHTML=`<div class="wrap"><div class="top">${ex?`<div class="chips">${['all','trending',...CATS].map(c=>`<button class="chip${c===exCat?' on':''}" data-c="${c}">${c[0].toUpperCase()+c.slice(1)}</button>`).join('')}</div>`:`<b>RandomScroll${kind==='adult'?' 18+':''}</b>`}<button class="ib" id="mute" aria-label="Mute or unmute">${ic(prefs.muted?'mute':'vol')}</button></div><button class="pill" id="unm">${ic('vol')} Tap for sound</button><div id="feed"></div><div class="empty" id="empty"><div class="spin"></div></div></div>`;
   const f=F={kind,n:0,busy:false,end:false},feed=$('#feed');
   f.lo=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting?e.target._pl.load():e.target._pl.unload()),{root:feed,rootMargin:'100% 0px'});
   f.io=new IntersectionObserver(es=>es.forEach(e=>{const c=e.target;
-    if(e.isIntersecting){if(prefs.autoplay||c._p)c._pl.play();countView(c);if([...feed.children].indexOf(c)>=feed.children.length-3)more()}else c._pl.pause()}),{root:feed,threshold:.7});
-  $('#mute').onclick=()=>{prefs.muted=!prefs.muted;savePrefs();$('#mute').innerHTML=ic(prefs.muted?'mute':'vol');feed.querySelectorAll('.card').forEach(c=>c._pl.mute(prefs.muted))};
+    if(e.isIntersecting){F.cur=c;if(prefs.autoplay||c._p)c._pl.play();countView(c);if([...feed.children].indexOf(c)>=feed.children.length-3)more()}else c._pl.pause()}),{root:feed,threshold:.7});
+  $('#mute').onclick=()=>{prefs.muted=!prefs.muted;savePrefs();$('#mute').innerHTML=ic(prefs.muted?'mute':'vol');feed.querySelectorAll('.card').forEach(c=>c._pl.mute(prefs.muted));if(!prefs.muted&&F.cur)F.cur._pl.play()};
+  $('#unm').onclick=()=>{forced(false);F.cur&&F.cur._pl.play()};
   document.querySelectorAll('.chip[data-c]').forEach(b=>b.onclick=()=>{exCat=b.dataset.c;stopFeed();startFeed('explore')});
   $('#empty').onclick=e=>{const a=e.target.dataset.e;if(a==='login')openAuth();if(a==='retry')more();if(a==='reset'){seen=[];sessionStorage.rs_seen='[]';f.end=false;more()}};
   feed.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const b=e.target.closest('[data-act]');if(b)return act(b.dataset.act,c,b);if(e.target.closest('a'))return;
-    if(c.classList.contains('bad')){c.classList.remove('bad');c._pl.retry();return}c._p=1;c._pl.paused()?c._pl.play():c._pl.pause()};
+    if(c.classList.contains('bad')){c.classList.remove('bad');c._pl.retry();return}const now=Date.now();if(now-(c._t||0)<300){c._t=0;const lb=c.querySelector('[data-act=like]');if(lb&&!lb.classList.contains('on'))act('like',c,lb);return}c._t=now;
+    c._p=1;c._pl.paused()?c._pl.play():c._pl.pause()};
   more();
 }
 function countView(c){if(c._v)return;c._v=1;if(prefs.history||!user)api('/view',{method:'POST',body:{id:c.dataset.id}}).catch(()=>{})}
@@ -131,7 +175,7 @@ async function more(){
   const f=F;if(!f.kind||f.busy||f.end)return;f.busy=true;
   try{
     let r;
-    if(f.kind==='favorites'){r=await api('/saved');f.end=true}
+    if(f.kind==='favorites'||f.kind==='uploads'){r=await api(f.kind==='uploads'?'/uploads':'/saved');f.end=true}
     else{
       const m=f.kind==='adult'?'adult':f.kind==='following'?'following':(f.kind==='explore'&&exCat==='trending')?'trending':'random';
       const cats=f.kind==='explore'?(exCat==='all'||exCat==='trending'?'':exCat):prefs.cats.join();
@@ -139,7 +183,7 @@ async function more(){
     }
     if(f!==F)return;
     r.videos.forEach(addCard);
-    if(!f.n)empty(f.kind==='favorites'?'<h3>No saved videos yet</h3><p>Tap the bookmark on any video to keep it here.</p>':f.kind==='following'?'<h3>Nothing new from followed creators</h3><p>Tap Follow on a video to see more from that creator here.</p>':'<h3>No new videos found</h3><button class="btn" data-e="retry">Try again</button> <button class="btn s" data-e="reset">Forget what I’ve seen</button>');
+    if(!f.n)empty(f.kind==='uploads'?'<h3>No uploads yet</h3>':f.kind==='favorites'?'<h3>No saved videos yet</h3><p>Tap the bookmark on any video to keep it here.</p>':f.kind==='following'?'<h3>Nothing new from followed creators</h3><p>Tap Follow on a video to see more from that creator here.</p>':'<h3>No new videos found</h3><button class="btn" data-e="retry">Try again</button> <button class="btn s" data-e="reset">Forget what I’ve seen</button>');
   }catch(e){
     if(f!==F)return;
     if(!f.n)empty(`<h3>${e.status===401?'Log in to continue':'Can’t load videos'}</h3><p>${esc(e.message)}</p><button class="btn" data-e="${e.status===401?'login':'retry'}">${e.status===401?'Log in':'Try again'}</button>`);
@@ -150,11 +194,11 @@ function addCard(v){
   const feed=$('#feed');if(!feed||feed.querySelector(`[data-id="${CSS.escape(v.id)}"]`))return;
   F.n++;seen.push(v.id);sessionStorage.rs_seen=JSON.stringify(seen.slice(-300));
   const c=document.createElement('section');c.className='card';c.dataset.id=v.id;c.dataset.ck=v.source+':'+v.cid;c._m=v;
-  if(v.poster)c.style.backgroundImage=`url("${v.poster.replace(/"/g,'%22')}")`;
   const b=(a,i,l,n,on)=>`<button class="rb${on?' on':''}" data-act="${a}" aria-label="${l}">${ic(i)}${n!==undefined?`<span>${n}</span>`:''}</button>`;
-  c.innerHTML=`<div class="media"></div><div class="tap"></div><div class="spin ld"></div><div class="msg">Video unavailable.<br>Tap to retry.</div><div class="prog"><i></i></div>
+  c.innerHTML=`<div class="bg"></div><div class="media"></div><div class="tap"></div><div class="spin ld"></div><div class="msg">Video unavailable.<br>Tap to retry.</div><div class="prog"><i></i></div>
   <div class="info"><b>@${esc(v.creator)}</b>${v.source==='pornhub'?'':`<button class="fol${v.following?' on':''}" data-act="follow" aria-label="Follow creator"></button>`}<p>${esc(v.title)}</p><small>${fmt(v.views)} views · <a href="${esc(v.page)}" target="_blank" rel="noopener">${SRC[v.source]}</a></small></div>
   <div class="rail">${b('like','heart','Like',v.likes,v.liked)}${b('cmt','msg','Comments',v.comments)}${b('save','mark','Save',undefined,v.saved)}${b('share','share','Share')}${b('fs','full','Full screen')}${b('report','flag','Report video')}</div>`;
+  if(v.poster)c.querySelector('.bg').style.backgroundImage='url("'+v.poster.replace(/"/g,'%22')+'")';
   c._pl=player(c,v,c.querySelector('.prog i'));
   feed.appendChild(c);F.lo.observe(c);F.io.observe(c);
 }
@@ -174,7 +218,9 @@ async function act(a,c,b){
       const r=await api('/follow',{method:'POST',body:{name:v.creator,source:v.source,cid:v.cid}});
       document.querySelectorAll('.card').forEach(x=>{if(x.dataset.ck===c.dataset.ck)x.querySelector('.fol').classList.toggle('on',r.on)});
       toast(r.on?'Following @'+v.creator:'Unfollowed');
-    }else if(a==='report'&&confirm('Report this video as inappropriate?')){await api('/report',{method:'POST',body:{id}});toast('Thanks, we’ll review it')}
+    }else if(a==='report'){
+      const r=await dlg({title:'Report this video',fields:[{id:'reason',label:'What is wrong with it?',type:'select',options:['Spam or scam','Sexual content','Violence or gore','Hate or harassment','Other']}],ok:'Report'});
+      if(!r)return;await api('/report',{method:'POST',body:{id,reason:r.reason,video:{...v,id}}});toast('Thanks, we’ll review it')}
   }catch(e){toast(e.message)}
 }
 
@@ -221,22 +267,17 @@ async function profile(){
   v.innerHTML='<div class="page"><div class="spin" style="margin:40px auto"></div></div>';
   try{
     const p=await api('/profile');
-    v.innerHTML=`<div class="page"><h2 style="margin:0">${esc(user.display_name)}</h2><p class="mut">Username: <b>${esc(user.id)}</b></p>
-    <div class="stats">${[['Likes',p.likes],['Saved',p.saves],['Comments',p.comments],['Following',p.following.length]].map(([a,b])=>`<div><b>${b}</b><small class="mut">${a}</small></div>`).join('')}</div>
+    v.innerHTML=`<div class="page"><h2 style="margin:0">${esc(user.display_name)}${user.badge?' <span style="color:#3b9eff" title="Verified">✔</span>':''}</h2><p class="mut">Username: <b>${esc(user.id)}</b></p>
+    <div class="stats">${[['Followers',p.followers],['Following',p.following_count],['Likes',p.likes],['Saved',p.saves],['Comments',p.comments],['Uploads',p.uploads]].map(([a,b])=>`<div><b>${fmt(b)}</b><small class="mut">${a}</small></div>`).join('')}</div>
     <h3>Following</h3>${p.following.map((f,i)=>`<div class="row"><span>@${esc(f.name)} <small class="mut">${SRC[f.source]}</small></span><button class="btn s" data-u="${i}">Unfollow</button></div>`).join('')||'<p class="mut">No one yet. Tap Follow on a video.</p>'}
-    <p><a class="btn s" href="#settings">Edit display name</a></p></div>`;
+    <p><a class="btn s" href="#uploads">My uploads (${p.uploads})</a> <a class="btn s" href="#settings">Edit display name</a></p></div>`;
     v.onclick=async e=>{const i=e.target.dataset.u;if(i!==undefined){try{await api('/follow',{method:'POST',body:p.following[i]});profile()}catch(x){toast(x.message)}}};
   }catch(e){if(e.status===401){user=null;profile()}else v.innerHTML=`<div class="page"><p>${esc(e.message)}</p></div>`}
 }
 async function toggleAdult(el){
-  try{if(el.checked&&!confirm('Show sexually explicit videos? Only continue if you are 18 or older and this is legal where you live.')){el.checked=false;return}
+  try{if(el.checked&&!await ask('Show sexually explicit videos? Only continue if you are 18 or older and this is legal where you live.')){el.checked=false;return}
     const r=await api('/me',{method:'PUT',body:{adult:el.checked}});user=r.user;if(!user.adult_on)delete sessionStorage.rs_18;renderNav();toast(user.adult_on?'18+ tab enabled':'18+ tab hidden')}
   catch(e){el.checked=!el.checked;toast(e.message)}
-}
-function adultGate(){
-  const m=$('#modal'),close=()=>{m.className='';m.innerHTML=''};m.className='open';
-  m.innerHTML='<div class="md"><h2 style="margin:0">18+ content</h2><p class="mut" style="margin:0">This section has sexually explicit videos from a third party. Continue only if you are 18 or older and it is legal where you live.</p><button class="btn" id="y18">I’m 18 or older, continue</button><button class="btn s" id="n18">Go back</button></div>';
-  $('#y18').onclick=()=>{sessionStorage.rs_18=1;close();startFeed('adult')};$('#n18').onclick=()=>{close();location.hash='#home'};
 }
 function settings(){
   const v=$('#view'),row=(l,c,h='')=>`<div class="row"><div><div>${l}</div>${h?`<small class="mut">${h}</small>`:''}</div>${c}</div>`;
@@ -261,13 +302,13 @@ function settings(){
   v.onclick=async e=>{const t=e.target,c=t.dataset.c;
     if(c){prefs.cats=prefs.cats.includes(c)?prefs.cats.filter(x=>x!==c):[...prefs.cats,c];t.classList.toggle('on');savePrefs()}
     try{
-      if(t.id==='sb'){const b=$('#bd').value;if(!b)return toast('Pick your birthday');if(!confirm('Your birthday cannot be changed after you save it. Continue?'))return;
+      if(t.id==='sb'){const b=$('#bd').value;if(!b)return toast('Pick your birthday');if(!await ask('Your birthday cannot be changed after you save it. Continue?'))return;
         const r=await api('/me',{method:'PUT',body:{birthday:b}});user=r.user;toast(user.adult_ok?'Birthday saved':'Birthday saved. 18+ videos are unavailable.');settings()}
       if(t.id==='li')openAuth();
       if(t.id==='lo2')logout();
       if(t.id==='ch'){await api('/history',{method:'DELETE'});seen=[];sessionStorage.rs_seen='[]';toast('History cleared')}
       if(t.id==='sn'){const r=await api('/me',{method:'PUT',body:{display_name:$('#dn').value}});user=r.user;toast('Name saved')}
-      if(t.id==='del'&&confirm('Delete your account and all its data? This cannot be undone.')){await api('/me',{method:'DELETE'});logout();location.hash='#home'}
+      if(t.id==='del'&&await ask('Delete your account and all its data? This cannot be undone.','Delete')){await api('/me',{method:'DELETE'});logout();location.hash='#home'}
     }catch(x){toast(x.message)}};
 }
 
@@ -275,56 +316,69 @@ function settings(){
 async function admin(){
   const v=$('#view');if(!user?.admin){location.hash='#home';return}
   const tabs=['overview','users','reports','comments'],when=t=>t?new Date(t).toLocaleString():'';
-  let tab=sessionStorage.rs_at||'overview',q='',off=0;
+  let tab=sessionStorage.rs_at||'overview',q='',off=0,bonly=false,cache={};
   const vlink=id=>{const[k,x]=id.split(':');return k==='yt'?'https://www.youtube.com/watch?v='+x:k==='archive'?'https://archive.org/details/'+x:k==='ph'?'https://www.pornhub.com/view_video.php?viewkey='+x:'https://commons.wikimedia.org/?curid='+x};
   const col=h=>`<div style="display:flex;flex-direction:column;gap:6px">${h}</div>`,bt=(a,l,d='')=>`<button class="btn s" data-a="${a}" ${d}>${l}</button>`;
   const render=async()=>{
     v.innerHTML=`<div class="page set"><h2 style="margin:0 0 10px">Admin panel</h2><div class="chips" style="margin-bottom:12px;flex-wrap:wrap">${tabs.map(t=>`<button class="chip${t===tab?' on':''}" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div><div id="ab"><div class="spin" style="margin:30px auto"></div></div></div>`;
     const b=$('#ab');
     try{
-      if(tab==='overview'){const o=await api('/admin/overview');b.innerHTML=`<div class="stats">${[['Users',o.users],['Banned',o.banned],['Reported videos',o.reported]].map(([a,n])=>`<div><b>${n}</b><small class="mut">${a}</small></div>`).join('')}</div><p class="mut">Use Users to ban or unban accounts and reset birthdays. Reports and Comments hold things people flagged.</p>`}
+      if(tab==='overview'){const o=await api('/admin/overview');b.innerHTML=`<div class="stats">${[['Users',o.users],['Banned',o.banned],['Reported videos',o.reported]].map(([a,n])=>`<div><b>${n}</b><small class="mut">${a}</small></div>`).join('')}</div><p class="mut">Users: ban, troll tools (fake followers, following, likes, badge, pop-up message), fake uploads, birthday reset. Reports and Comments hold flagged items.</p>`}
       else if(tab==='users'){
-        const r=await api(`/admin/users?q=${encodeURIComponent(q)}&off=${off}`);
-        b.innerHTML=`<div class="in"><input id="uq" placeholder="User ID prefix or exact email" value="${esc(q)}"><button class="btn" id="us">Search</button></div>`+
-        (r.users.map(u=>{const d=`data-id="${esc(u.id)}"`;return`<div class="row" style="align-items:flex-start"><div><b>${esc(u.id)}</b>${u.admin?' <small class="mut">(admin)</small>':''}<br><small class="mut">${esc(u.email)} · ${esc(u.display_name)}<br>Age: ${u.age_group||'not set'}${u.adult_on?' · 18+ on':''} · Joined ${when(u.created)}</small>${u.ban?`<br><small style="color:var(--acc)">Banned ${u.ban.until?'until '+when(u.ban.until):'permanently'}${u.ban.reason?': '+esc(u.ban.reason):''}</small>`:''}</div>${col((u.admin?'':u.ban?bt('unban','Unban',d):bt('ban','Ban',d))+(u.age_group?bt('rbd','Reset birthday',d):''))}</div>`}).join('')||'<p class="mut">No users found.</p>')+
+        const r=await api(`/admin/users?q=${encodeURIComponent(q)}&off=${off}${bonly?'&banned=1':''}`);cache=Object.fromEntries(r.users.map(u=>[u.id,u]));
+        b.innerHTML=`<div class="in"><input id="uq" placeholder="ID, name or email" value="${esc(q)}"><button class="btn" id="us">Search</button><button class="btn s" id="ub">${bonly?'All':'Banned'}</button></div>`+
+        (r.users.map(u=>{const d=`data-id="${esc(u.id)}"`,bo=u.boost||{},fk=['followers','following','likes'].filter(k=>bo[k]).map(k=>`+${fmt(bo[k])} ${k}`).join(', ');
+          return`<div class="row" style="align-items:flex-start"><div><b>${esc(u.id)}</b>${u.admin?' <small class="mut">(admin)</small>':''}${u.badge?' <span style="color:#3b9eff">✔</span>':''}<br><small class="mut">${esc(u.email)} · ${esc(u.display_name)}<br>Age: ${u.age_group||'not set'}${u.adult_on?' · 18+ on':''} · Joined ${when(u.created)}${fk?'<br>Fake: '+esc(fk):''}${u.uploads?' · '+u.uploads+' uploads':''}</small>${u.ban?`<br><small style="color:var(--acc)">Banned ${u.ban.until?'until '+when(u.ban.until):'permanently'}${u.ban.reason?': '+esc(u.ban.reason):''}</small>`:''}</div>${col((u.admin?'':u.ban?bt('unban','Unban',d):bt('ban','Ban',d))+bt('troll','Troll tools',d)+bt('fake','Fake upload',d)+(u.age_group?bt('rbd','Reset birthday',d):''))}</div>`}).join('')||'<p class="mut">No users found.</p>')+
         `<p class="mut">${r.total} total${r.next!==null?` · <a href="#admin" data-more="${r.next}">Next page</a>`:''}</p>`;
       }else if(tab==='reports'){
         const r=await api('/admin/reports');
-        b.innerHTML=r.reports.map(x=>{const d=`data-id="${esc(x.id)}"`;return`<div class="row"><div><a href="${esc(vlink(x.id))}" target="_blank" rel="noopener noreferrer">${esc(x.id)}</a><br><small class="mut">${x.count} report(s) · ${when(x.t)}${x.blocked?' · BLOCKED':''}</small></div>${col(bt(x.blocked?'vunblock':'vblock',x.blocked?'Unblock':'Block video',d)+(x.blocked?'':bt('vdismiss','Dismiss',d)))}</div>`}).join('')||'<p class="mut">No reported videos.</p>';
+        b.innerHTML=r.reports.map(x=>{const d=`data-id="${esc(x.id)}"`,why=Object.entries(x.reasons||{}).map(([k,n])=>`${esc(k)} ×${n}`).join(', ');
+          return`<div class="row" style="align-items:flex-start"><div><a href="${esc(vlink(x.id))}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.id)}</a>${x.creator?`<br><small class="mut">by ${esc(x.creator)}</small>`:''}<br><small class="mut">${x.count} report(s) · ${when(x.t)}${x.blocked?' · BLOCKED':''}${why?'<br>'+why:''}</small></div>${col(bt(x.blocked?'vunblock':'vblock',x.blocked?'Unblock':'Block video',d)+(x.blocked?'':bt('vdismiss','Dismiss',d)))}</div>`}).join('')||'<p class="mut">No reported videos.</p>';
       }else{
         const r=await api('/admin/comments');
         b.innerHTML=r.comments.map(c=>{const d=`data-k="${esc(c.key)}" data-cid="${c.cid}"`;return`<div class="row" style="align-items:flex-start"><div><b>${esc(c.name)}</b> <small class="mut">${esc(c.uid)} · ${c.reports} report(s)${c.hidden?' · hidden':''}</small><p style="margin:4px 0">${esc(c.text)}</p></div>${col((c.hidden?bt('cshow','Restore',d):bt('chide','Hide',d))+bt('cdel','Delete',d)+bt('ban','Ban user',`data-id="${esc(c.uid)}"`))}</div>`}).join('')||'<p class="mut">No flagged comments.</p>';
       }
     }catch(e){b.textContent=e.message}
   };
-  v.onclick=async e=>{const t=e.target,a=t.dataset.a,id=t.dataset.id,post=(p,body)=>api(p,{method:'POST',body}).then(()=>render());
+  v.onclick=async e=>{const t=e.target.closest('button,a')||e.target,a=t.dataset.a,id=t.dataset.id,post=(p,body)=>api(p,{method:'POST',body}).then(()=>render());
     try{
       if(t.dataset.t){tab=t.dataset.t;sessionStorage.rs_at=tab;q='';off=0;return render()}
-      if(t.id==='us'){q=$('#uq').value;off=0;return render()}
+      if(t.id==='us'){q=$('#uq').value;off=0;bonly=false;return render()}
+      if(t.id==='ub'){bonly=!bonly;q='';off=0;return render()}
       if(t.dataset.more){e.preventDefault();off=+t.dataset.more;return render()}
-      if(a==='ban'){const reason=prompt('Reason (shown to the user):','');if(reason===null)return;const days=prompt('Days (0 = permanent):','0');if(days===null)return;await post('/admin/ban',{id,reason,days:+days||0});toast('Banned '+id)}
+      if(a==='ban'){
+        const r=await dlg({title:'Ban '+id,fields:[{id:'reason',label:'Reason (shown to the user)',type:'text'},{id:'days',label:'Length',type:'select',options:[['1','1 day'],['7','7 days'],['30','30 days'],['0','Permanent']]},{id:'ip',label:'Also block sign-ups from their network',type:'checkbox'}],ok:'Ban'});
+        if(!r)return;const x=await api('/admin/ban',{method:'POST',body:{id,reason:r.reason,days:+r.days,ip:r.ip}});toast('Banned '+id+(r.ip?(x.ip?' and their network':' (no network on file yet)'):''));render()}
       else if(a==='unban'){await post('/admin/unban',{id});toast('Unbanned')}
-      else if(a==='rbd'){if(confirm('Clear this user’s birthday? They will have to enter it again and adult access turns off.')){await post('/admin/reset-birthday',{id});toast('Birthday reset')}}
+      else if(a==='rbd'){if(await ask('Clear this user’s birthday? They will have to enter it again and adult access turns off.','Reset')){await post('/admin/reset-birthday',{id});toast('Birthday reset')}}
+      else if(a==='troll'){const u=cache[id]||{};
+        const r=await dlg({title:'Troll tools: '+id,body:'Numbers are added to what the account already shows (negative removes). Only the account owner sees them on their Profile.',fields:[
+          {id:'followers',label:'Add followers',type:'number',value:0},{id:'following',label:'Add following',type:'number',value:0},{id:'likes',label:'Add likes',type:'number',value:0},
+          {id:'badge',label:'Verified ✔ badge',type:'checkbox',value:u.badge},{id:'reset',label:'Reset fake numbers to 0 first',type:'checkbox'},
+          {id:'name',label:'Force display name (blank = leave)',type:'text'},{id:'notice',label:'Pop-up shown next time they open the site',type:'textarea'}],ok:'Apply'});
+        if(!r)return;await post('/admin/troll',{id,followers:+r.followers||0,following:+r.following||0,likes:+r.likes||0,badge:r.badge,reset:r.reset,name:r.name,notice:r.notice});toast('Applied to '+id)}
+      else if(a==='fake'){const r=await dlg({title:'Fake upload for '+id,body:'Adds random real videos to their account as if they uploaded them, with made-up views and likes.',fields:[{id:'count',label:'How many (1-5)',type:'number',value:1}],ok:'Add'});
+        if(!r)return;const x=await api('/admin/fake-upload',{method:'POST',body:{id,count:+r.count||1}});toast('Added '+x.added+' video(s)');render()}
       else if(a==='vblock'||a==='vunblock'||a==='vdismiss'){await post('/admin/video',{id,action:a.slice(1)})}
-      else if(a==='chide'||a==='cshow'||a==='cdel'){if(a==='cdel'&&!confirm('Delete this comment?'))return;await post('/admin/comment',{key:t.dataset.k,cid:t.dataset.cid,action:a==='cdel'?'delete':a.slice(1)})}
+      else if(a==='chide'||a==='cshow'||a==='cdel'){if(a==='cdel'&&!await ask('Delete this comment?','Delete'))return;await post('/admin/comment',{key:t.dataset.k,cid:t.dataset.cid,action:a==='cdel'?'delete':a.slice(1)})}
     }catch(x){toast(x.message)}};
   render();
 }
 
 /* ---------- Router ---------- */
 const NAV0=[['home','home','Home'],['explore','compass','Explore'],['following','users','Following'],['favorites','mark','Favorites'],['profile','user','Profile'],['settings','set','Settings']];
-function renderNav(){const L=[...NAV0];if(user?.adult_on)L.splice(4,0,['adult','lock','18+']);if(user?.admin)L.push(['admin','shield','Admin']);
+function renderNav(){const L=[...NAV0];if(user)L.splice(4,0,['adult','lock','18+']);if(user?.admin)L.push(['admin','shield','Admin']);
   $('#nav').innerHTML=L.map(([h,i,l])=>`<a href="#${h}">${ic(i)}<span>${l}</span></a>`).join('');
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.hash===(location.hash||'#home')))}
 const R={home:()=>startFeed('home'),explore:()=>startFeed('explore'),following:()=>startFeed('following'),favorites:()=>startFeed('favorites'),profile,settings,admin,
-  adult:()=>{if(!user?.adult_on){toast('Turn on 18+ videos in Settings first');location.hash='#settings';return}sessionStorage.rs_18?startFeed('adult'):adultGate()}};
+  adult:adultFlow,uploads:()=>startFeed('uploads')};
 function route(){
-  const k=R[(location.hash||'#home').slice(1)]?location.hash.slice(1):'home';
+  const k=R[location.hash.slice(1)]?location.hash.slice(1):'home';
   stopFeed();const v=$('#view');v.onclick=v.onchange=null;renderNav();
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.hash==='#'+k));
   R[k]();
 }
 addEventListener('hashchange',route);
 document.documentElement.dataset.theme=prefs.theme;
-(async()=>{if(token)try{setUser(await api('/me'))}catch(e){if(e.status===401||e.status===403){token=null;delete localStorage.rs_token}}route()})();
+(async()=>{if(token)try{const r=await api('/me');setUser(r);if(r.notice)setTimeout(()=>dlg({title:'Message from the admins',body:r.notice,ok:'OK',cancel:null}),400)}catch(e){if(e.status===401||e.status===403){token=null;delete localStorage.rs_token}}route()})();
 </script></body></html>
