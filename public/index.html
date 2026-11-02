@@ -1,1 +1,330 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RandomScroll</title>
+<style>
+:root{--bg:#0d0d12;--fg:#f4f4f7;--card:#1b1b24;--mut:#9b9bab;--acc:#ff4d6d;--bd:#2c2c3a}
+[data-theme=light]{--bg:#fff;--fg:#14141a;--card:#f1f1f5;--mut:#6a6a78;--bd:#dcdce4}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,sans-serif;overflow:hidden}
+a{color:inherit}button,input,select{font:inherit;color:inherit}
+nav{position:fixed;z-index:20;bottom:0;left:0;right:0;display:flex;background:var(--bg);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;text-decoration:none;color:var(--mut);font-size:11px}nav a.on{color:var(--acc)}
+svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#view{height:100dvh;padding-bottom:calc(56px + env(safe-area-inset-bottom))}
+.wrap{position:relative;height:100%;max-width:460px;margin:0 auto;background:#000}
+#feed{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scroll-behavior:smooth;overscroll-behavior:contain;scrollbar-width:none}#feed::-webkit-scrollbar{display:none}
+.card{position:relative;height:100%;scroll-snap-align:start;scroll-snap-stop:always;background:#000 center/cover;color:#fff;overflow:hidden}
+.card.ready{background-image:none!important}
+.media{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .45s}.card.ready .media{opacity:1}
+.media video{width:100%;height:100%;object-fit:contain}.media iframe{width:100%!important;height:auto!important;aspect-ratio:16/9;border:0;pointer-events:none}
+.tap{position:absolute;inset:0}.card.emb .tap{display:none}.card.emb .media iframe{pointer-events:auto}
+.ld{position:absolute;inset:0;margin:auto}.card.ready .ld,.card.bad .ld{display:none}
+.spin{width:34px;height:34px;border:3px solid #fff4;border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(1turn)}}
+.msg{display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:#000a;text-align:center;padding:30px}.card.bad .msg{display:flex}
+.prog{position:absolute;left:0;right:0;bottom:0;height:3px;background:#fff3}.prog i{display:block;height:100%;width:0;background:var(--acc)}
+.info{position:absolute;left:14px;right:80px;bottom:18px;text-shadow:0 1px 6px #000}.info p{margin:4px 0}.info small{opacity:.9}
+.fol{margin-left:8px;border:1px solid #fff;background:none;border-radius:6px;padding:2px 10px;font-size:12px;cursor:pointer;color:#fff}.fol:after{content:'Follow'}.fol.on{background:#fff3}.fol.on:after{content:'Following'}
+.rail{position:absolute;right:8px;bottom:22px;display:flex;flex-direction:column;gap:14px;align-items:center}
+.rb,.ib{background:none;border:0;color:#fff;display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:12px;text-shadow:0 1px 4px #000;padding:4px}
+.rb svg{width:30px;height:30px;filter:drop-shadow(0 1px 3px #000a);transition:transform .2s}.rb:active svg{transform:scale(1.25)}.rb.on svg{fill:var(--acc);stroke:var(--acc)}
+.top{position:absolute;z-index:5;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:8px;color:#fff;background:linear-gradient(#000a,transparent)}.ib{flex-direction:row}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.chip{border:0;border-radius:99px;padding:6px 12px;background:#fff2;color:#fff;white-space:nowrap;cursor:pointer}.chip.on{background:var(--acc)}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;text-align:center;padding:30px;color:#fff;pointer-events:none}.empty>*{pointer-events:auto}#feed:not(:empty)~.empty{display:none!important}
+.btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:10px 18px;cursor:pointer;text-decoration:none;display:inline-block}.btn.s{padding:6px 12px;background:var(--card);color:var(--fg);border:1px solid var(--bd)}
+.page{height:100%;overflow-y:auto;max-width:560px;margin:0 auto;padding:20px 16px}
+.mut{color:var(--mut)}.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--bd)}
+.stats{display:flex;gap:10px}.stats div{flex:1;background:var(--card);border-radius:12px;padding:12px;text-align:center}.stats b{display:block;font-size:20px}
+input,select{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:9px 10px;width:100%}.row input,.row select{width:auto;max-width:55%}input[type=checkbox]{width:20px;height:20px;accent-color:var(--acc)}
+.set .chip{background:var(--card);color:var(--fg)}.set .chip.on{background:var(--acc);color:#fff}
+#sheet,#modal{position:fixed;inset:0;z-index:50;display:none;background:#0008;align-items:flex-end;justify-content:center}#sheet.open,#modal.open{display:flex}#modal{align-items:center}
+.sh,.md{background:var(--bg);color:var(--fg);width:100%;max-width:460px;border-radius:18px 18px 0 0;max-height:75dvh;display:flex;flex-direction:column;padding:14px;animation:up .25s}
+.md{border-radius:18px;margin:16px;gap:10px;max-height:90dvh;overflow:auto}@keyframes up{from{transform:translateY(40px);opacity:0}}
+.sh .hd{display:flex;justify-content:space-between;align-items:center}.sh .ib{color:var(--fg)}
+.cl{overflow-y:auto;flex:1;min-height:120px}.cm{padding:8px 0}.cm.re{margin-left:28px}.cm p{margin:2px 0}.cm a,.cm small{color:var(--mut);cursor:pointer}
+.in{display:flex;gap:8px;padding-top:8px}.in input{flex:1}
+#toast{position:fixed;z-index:99;left:50%;top:14px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw}#toast.on{opacity:1}
+@media(min-width:800px){nav{top:0;bottom:auto;width:88px;height:100%;flex-direction:column;justify-content:center;border:0;border-right:1px solid var(--bd)}nav a{flex:0;padding:14px 0}#view{margin-left:88px;padding-bottom:0}.wrap{border-radius:14px;overflow:hidden;height:calc(100dvh - 24px);margin-top:12px}.sh{border-radius:18px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head><body>
+<nav id="nav"></nav><main id="view"></main><div id="sheet"></div><div id="modal"></div><div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':n;
+const ago=t=>{const s=Date.now()/1e3-t;return s<60?'just now':s<3600?(s/60|0)+'m':s<86400?(s/3600|0)+'h':(s/86400|0)+'d'};
+const IC={heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',msg:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',mark:'<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',share:'<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>',home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10"/>',compass:'<circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z"/>',users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',set:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',vol:'<path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',mute:'<path d="M11 5L6 9H2v6h4l5 4zM23 9l-6 6M17 9l6 6"/>',full:'<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',flag:'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/>',x:'<path d="M18 6L6 18M6 6l12 12"/>',shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'};
+const ic=n=>`<svg class="i" viewBox="0 0 24 24">${IC[n]}</svg>`;
+const CATS=['comedy','gaming','science','technology','education','entertainment','nature','travel'];
+const LANGS={'en-US':'English','es-ES':'Español','fr-FR':'Français','de-DE':'Deutsch','pt-BR':'Português','ja-JP':'日本語'};
+const SRC={youtube:'YouTube',commons:'Wikimedia Commons',archive:'Internet Archive',pornhub:'Pornhub'};
+const DEF={theme:'dark',muted:true,autoplay:true,cats:[],lang:'en-US',history:true,maturity:'teen'};
+let prefs={...DEF,...JSON.parse(localStorage.rs_prefs||'{}')},token=localStorage.rs_token,user=null,exCat='all',F={};
+let seen=JSON.parse(sessionStorage.rs_seen||'[]');
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),3200)};
+async function api(p,o={}){
+  const r=await fetch('/api'+p,{method:o.method||'GET',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:o.body?JSON.stringify(o.body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok&&j.banned&&token){token=null;user=null;delete localStorage.rs_token;toast(j.error)}
+  if(!r.ok)throw Object.assign(new Error(j.error||'Request failed ('+r.status+')'),{status:r.status});
+  return j;
+}
+function savePrefs(){localStorage.rs_prefs=JSON.stringify(prefs);document.documentElement.dataset.theme=prefs.theme;if(user)api('/me',{method:'PUT',body:{prefs}}).catch(()=>{})}
+const need=()=>user?true:(openAuth(),false);
+function setUser(r){if(r.token){token=r.token;localStorage.rs_token=token}user=r.user;if(user.prefs&&Object.keys(user.prefs).length){prefs={...DEF,...user.prefs};localStorage.rs_prefs=JSON.stringify(prefs)}document.documentElement.dataset.theme=prefs.theme}
+function logout(){token=null;user=null;delete localStorage.rs_token;delete sessionStorage.rs_18;toast('Logged out');route()}
 
+/* ---------- Players (file video or YouTube iframe) ---------- */
+let ytP;const ytApi=()=>ytP||(ytP=new Promise(r=>{window.onYouTubeIframeAPIReady=r;const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)}));
+function player(c,v,bar){
+  const box=c.querySelector('.media'),nofs=()=>toast('Full screen not supported');
+  if(v.kind==='yt'){
+    let p,t,want=false,d;
+    const pl={
+      load(){if(d)return;d=document.createElement('div');box.appendChild(d);
+        ytApi().then(()=>{if(!d)return;p=new YT.Player(d,{videoId:v.src,playerVars:{controls:0,playsinline:1,rel:0,modestbranding:1,fs:0,disablekb:1,loop:1,playlist:v.src},events:{onReady:()=>{c.classList.add('ready');if(want)pl.play()},onError:()=>c.classList.add('bad')}})})},
+      unload(){clearInterval(t);try{p&&p.destroy()}catch{}p=null;d=null;box.innerHTML='';c.classList.remove('ready')},
+      play(){want=true;if(!p||!p.playVideo)return;prefs.muted?p.mute():p.unMute();p.playVideo();clearInterval(t);t=setInterval(()=>{try{bar.style.width=p.getCurrentTime()/(p.getDuration()||1)*100+'%'}catch{}},500)},
+      pause(){want=false;clearInterval(t);try{p&&p.pauseVideo&&p.pauseVideo()}catch{}},
+      mute(m){try{p&&p.mute&&(m?p.mute():p.unMute())}catch{}},
+      paused:()=>!want,retry(){pl.unload();pl.load()},fs(){(c.requestFullscreen||c.webkitRequestFullscreen||nofs).call(c)}};
+    return pl;
+  }
+  if(v.kind==='embed'){
+    const f=document.createElement('iframe'),url='https://www.pornhub.com/embed/'+encodeURIComponent(v.src),set=u=>{if(f.getAttribute('src')!==u)f.setAttribute('src',u)};
+    c.classList.add('emb');f.setAttribute('allow','fullscreen');f.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation');f.allowFullscreen=true;
+    f.addEventListener('load',()=>{if(f.getAttribute('src')===url)c.classList.add('ready')});
+    return{load(){if(!f.parentNode)box.appendChild(f);set(url)},unload(){f.remove();f.removeAttribute('src');c.classList.remove('ready')},
+      play(){set(url)},pause(){if(f.parentNode&&f.getAttribute('src')===url){f.setAttribute('src','about:blank');c.classList.remove('ready')}},
+      mute(){},paused:()=>true,retry(){f.removeAttribute('src');set(url)},fs(){(f.requestFullscreen||f.webkitRequestFullscreen||nofs).call(f)}};
+  }
+  const el=document.createElement('video');Object.assign(el,{playsInline:true,loop:true,muted:true,preload:'auto'});box.appendChild(el);
+  el.addEventListener('loadeddata',()=>c.classList.add('ready'));
+  el.addEventListener('loadedmetadata',()=>{el.style.objectFit=el.videoHeight>=el.videoWidth?'cover':'contain'});
+  el.addEventListener('timeupdate',()=>{bar.style.width=el.currentTime/(el.duration||1)*100+'%'});
+  el.addEventListener('error',()=>{if(el.getAttribute('src'))c.classList.add('bad')});
+  return{load(){if(!el.getAttribute('src'))el.src=v.src},unload(){el.pause();el.removeAttribute('src');el.load();c.classList.remove('ready')},
+    play(){el.muted=prefs.muted;const r=el.play();r&&r.catch(()=>{el.muted=true;el.play().catch(()=>{})})},pause(){el.pause()},mute(m){el.muted=m},
+    paused:()=>el.paused,retry(){el.src=v.src},fs(){(el.requestFullscreen||el.webkitRequestFullscreen||el.webkitEnterFullscreen||nofs).call(el)}};
+}
+
+/* ---------- Feed ---------- */
+function stopFeed(){F.io&&F.io.disconnect();F.lo&&F.lo.disconnect();document.querySelectorAll('#feed .card').forEach(c=>c._pl&&c._pl.unload());F={}}
+function startFeed(kind){
+  const ex=kind==='explore';
+  $('#view').innerHTML=`<div class="wrap"><div class="top">${ex?`<div class="chips">${['all','trending',...CATS].map(c=>`<button class="chip${c===exCat?' on':''}" data-c="${c}">${c[0].toUpperCase()+c.slice(1)}</button>`).join('')}</div>`:`<b>RandomScroll${kind==='adult'?' 18+':''}</b>`}<button class="ib" id="mute" aria-label="Mute or unmute">${ic(prefs.muted?'mute':'vol')}</button></div><div id="feed"></div><div class="empty" id="empty"><div class="spin"></div></div></div>`;
+  const f=F={kind,n:0,busy:false,end:false},feed=$('#feed');
+  f.lo=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting?e.target._pl.load():e.target._pl.unload()),{root:feed,rootMargin:'100% 0px'});
+  f.io=new IntersectionObserver(es=>es.forEach(e=>{const c=e.target;
+    if(e.isIntersecting){if(prefs.autoplay||c._p)c._pl.play();countView(c);if([...feed.children].indexOf(c)>=feed.children.length-3)more()}else c._pl.pause()}),{root:feed,threshold:.7});
+  $('#mute').onclick=()=>{prefs.muted=!prefs.muted;savePrefs();$('#mute').innerHTML=ic(prefs.muted?'mute':'vol');feed.querySelectorAll('.card').forEach(c=>c._pl.mute(prefs.muted))};
+  document.querySelectorAll('.chip[data-c]').forEach(b=>b.onclick=()=>{exCat=b.dataset.c;stopFeed();startFeed('explore')});
+  $('#empty').onclick=e=>{const a=e.target.dataset.e;if(a==='login')openAuth();if(a==='retry')more();if(a==='reset'){seen=[];sessionStorage.rs_seen='[]';f.end=false;more()}};
+  feed.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const b=e.target.closest('[data-act]');if(b)return act(b.dataset.act,c,b);if(e.target.closest('a'))return;
+    if(c.classList.contains('bad')){c.classList.remove('bad');c._pl.retry();return}c._p=1;c._pl.paused()?c._pl.play():c._pl.pause()};
+  more();
+}
+function countView(c){if(c._v)return;c._v=1;if(prefs.history||!user)api('/view',{method:'POST',body:{id:c.dataset.id}}).catch(()=>{})}
+function empty(html){const e=$('#empty');if(e)e.innerHTML=html}
+async function more(){
+  const f=F;if(!f.kind||f.busy||f.end)return;f.busy=true;
+  try{
+    let r;
+    if(f.kind==='favorites'){r=await api('/saved');f.end=true}
+    else{
+      const m=f.kind==='adult'?'adult':f.kind==='following'?'following':(f.kind==='explore'&&exCat==='trending')?'trending':'random';
+      const cats=f.kind==='explore'?(exCat==='all'||exCat==='trending'?'':exCat):prefs.cats.join();
+      r=await api(`/feed?mode=${m}&cats=${cats}&lang=${prefs.lang}&seen=${seen.slice(-150).join()}`);
+    }
+    if(f!==F)return;
+    r.videos.forEach(addCard);
+    if(!f.n)empty(f.kind==='favorites'?'<h3>No saved videos yet</h3><p>Tap the bookmark on any video to keep it here.</p>':f.kind==='following'?'<h3>Nothing new from followed creators</h3><p>Tap Follow on a video to see more from that creator here.</p>':'<h3>No new videos found</h3><button class="btn" data-e="retry">Try again</button> <button class="btn s" data-e="reset">Forget what I’ve seen</button>');
+  }catch(e){
+    if(f!==F)return;
+    if(!f.n)empty(`<h3>${e.status===401?'Log in to continue':'Can’t load videos'}</h3><p>${esc(e.message)}</p><button class="btn" data-e="${e.status===401?'login':'retry'}">${e.status===401?'Log in':'Try again'}</button>`);
+    else toast(e.message);
+  }finally{f.busy=false}
+}
+function addCard(v){
+  const feed=$('#feed');if(!feed||feed.querySelector(`[data-id="${CSS.escape(v.id)}"]`))return;
+  F.n++;seen.push(v.id);sessionStorage.rs_seen=JSON.stringify(seen.slice(-300));
+  const c=document.createElement('section');c.className='card';c.dataset.id=v.id;c.dataset.ck=v.source+':'+v.cid;c._m=v;
+  if(v.poster)c.style.backgroundImage=`url("${v.poster.replace(/"/g,'%22')}")`;
+  const b=(a,i,l,n,on)=>`<button class="rb${on?' on':''}" data-act="${a}" aria-label="${l}">${ic(i)}${n!==undefined?`<span>${n}</span>`:''}</button>`;
+  c.innerHTML=`<div class="media"></div><div class="tap"></div><div class="spin ld"></div><div class="msg">Video unavailable.<br>Tap to retry.</div><div class="prog"><i></i></div>
+  <div class="info"><b>@${esc(v.creator)}</b>${v.source==='pornhub'?'':`<button class="fol${v.following?' on':''}" data-act="follow" aria-label="Follow creator"></button>`}<p>${esc(v.title)}</p><small>${fmt(v.views)} views · <a href="${esc(v.page)}" target="_blank" rel="noopener">${SRC[v.source]}</a></small></div>
+  <div class="rail">${b('like','heart','Like',v.likes,v.liked)}${b('cmt','msg','Comments',v.comments)}${b('save','mark','Save',undefined,v.saved)}${b('share','share','Share')}${b('fs','full','Full screen')}${b('report','flag','Report video')}</div>`;
+  c._pl=player(c,v,c.querySelector('.prog i'));
+  feed.appendChild(c);F.lo.observe(c);F.io.observe(c);
+}
+async function act(a,c,b){
+  const v=c._m,id=v.id;
+  if(a==='fs')return c._pl.fs();
+  if(a==='share'){try{if(navigator.share)await navigator.share({title:'RandomScroll',text:v.title,url:v.page});else{await navigator.clipboard.writeText(v.page);toast('Link copied')}}catch{}return}
+  if(a==='cmt')return openComments(id,c);
+  if(!need())return;
+  const n=b.querySelector('span'),was=b.classList.contains('on'),cnt=n?+n.textContent:0;
+  try{
+    if(a==='like'||a==='save'){
+      b.classList.toggle('on');if(a==='like')n.textContent=cnt+(was?-1:1);
+      try{const r=await api('/'+a,{method:'POST',body:a==='like'?{id}:{video:{...v,id}}});b.classList.toggle('on',r.on);if(a==='like')n.textContent=r.count;else toast(r.on?'Saved to Favorites':'Removed from Favorites')}
+      catch(e){b.classList.toggle('on',was);if(n)n.textContent=cnt;throw e}
+    }else if(a==='follow'){
+      const r=await api('/follow',{method:'POST',body:{name:v.creator,source:v.source,cid:v.cid}});
+      document.querySelectorAll('.card').forEach(x=>{if(x.dataset.ck===c.dataset.ck)x.querySelector('.fol').classList.toggle('on',r.on)});
+      toast(r.on?'Following @'+v.creator:'Unfollowed');
+    }else if(a==='report'&&confirm('Report this video as inappropriate?')){await api('/report',{method:'POST',body:{id}});toast('Thanks, we’ll review it')}
+  }catch(e){toast(e.message)}
+}
+
+/* ---------- Comments ---------- */
+async function openComments(id,card){
+  const s=$('#sheet');s.className='open';let reply=null;
+  s.innerHTML=`<div class="sh"><div class="hd"><b>Comments</b><button class="ib" data-x aria-label="Close">${ic('x')}</button></div><div id="cl" class="cl"><div class="spin"></div></div><div id="rp" class="mut"></div><div class="in"><input id="ci" maxlength="300" placeholder="Add a comment…"><button class="btn" id="cs">Post</button></div></div>`;
+  const load=async()=>{try{
+    const{comments}=await api('/comments?id='+encodeURIComponent(id));
+    const one=c=>`<div class="cm${c.parent_id?' re':''}"><b>${esc(c.name)}</b> <small>${ago(c.created)}</small><p>${esc(c.text)}</p><small><a data-r="${c.parent_id||c.id}" data-n="${esc(c.name)}">Reply</a> · <a data-f="${c.id}">Report</a></small></div>`;
+    const top=comments.filter(c=>!c.parent_id);
+    $('#cl').innerHTML=top.length?top.map(c=>one(c)+comments.filter(r=>r.parent_id===c.id).map(one).join('')).join(''):'<p class="mut">No comments yet. Start the conversation.</p>';
+    card.querySelector('[data-act=cmt] span').textContent=comments.length;
+  }catch(e){$('#cl').textContent=e.message}};
+  s.onclick=async e=>{
+    if(e.target===s||e.target.closest('[data-x]')){s.className='';s.innerHTML='';return}
+    const r=e.target.closest('[data-r]'),f=e.target.closest('[data-f]');
+    if(r){reply={id:+r.dataset.r};$('#rp').textContent='Replying to '+r.dataset.n;$('#ci').focus()}
+    if(f&&need())try{await api('/comments/report',{method:'POST',body:{id,cid:f.dataset.f}});toast('Comment reported')}catch(x){toast(x.message)}
+    if(e.target.id==='cs'&&need()){const i=$('#ci');if(!i.value.trim())return;
+      try{await api('/comments',{method:'POST',body:{id,text:i.value,parent:reply?.id}});i.value='';reply=null;$('#rp').textContent='';await load()}catch(x){toast(x.message)}}
+  };
+  load();
+}
+
+/* ---------- Auth ---------- */
+function openAuth(tab='login'){
+  const m=$('#modal'),reg=tab==='register';m.className='open';
+  m.innerHTML=`<div class="md"><h2 style="margin:0">${reg?'Create account':'Log in'}</h2>${reg?'<p class="mut" style="margin:0">You’ll get a unique ID like User_839201 as your username.</p>':''}
+  <input id="a1" type="${reg?'email':'text'}" placeholder="${reg?'Email':'Email or User ID'}" autocomplete="username"><input id="a2" type="password" placeholder="Password${reg?' (8+ characters)':''}" autocomplete="${reg?'new-password':'current-password'}">${reg?`<label class="mut" style="font-size:13px">Date of birth (13+ to sign up; 18+ for adult content)</label><input id="a3" type="date" max="${new Date().toISOString().slice(0,10)}">`:''}
+  <button class="btn" id="go">${reg?'Create account':'Log in'}</button><button class="btn s" id="sw">${reg?'I already have an account':'Create a new account'}</button><button class="btn s" id="cl2">Cancel</button></div>`;
+  $('#sw').onclick=()=>openAuth(reg?'login':'register');
+  const close=()=>{m.className='';m.innerHTML=''};$('#cl2').onclick=close;m.onclick=e=>{if(e.target===m)close()};
+  $('#go').onclick=async()=>{try{
+    const r=await api(reg?'/register':'/login',{method:'POST',body:reg?{email:$('#a1').value,password:$('#a2').value,birthday:$('#a3').value}:{login:$('#a1').value,password:$('#a2').value}});
+    const local=prefs;setUser(r);if(reg){prefs={...local};savePrefs()}close();toast(reg?'Welcome! Your ID is '+r.user.id:'Welcome back, '+r.user.display_name);route();
+  }catch(e){toast(e.message)}};
+}
+
+/* ---------- Pages ---------- */
+async function profile(){
+  const v=$('#view');
+  if(!user){v.innerHTML='<div class="page"><h2>Profile</h2><p class="mut">Log in to get your unique ID and to like, save, follow and comment.</p><button class="btn" id="li">Log in or sign up</button></div>';$('#li').onclick=()=>openAuth();return}
+  v.innerHTML='<div class="page"><div class="spin" style="margin:40px auto"></div></div>';
+  try{
+    const p=await api('/profile');
+    v.innerHTML=`<div class="page"><h2 style="margin:0">${esc(user.display_name)}</h2><p class="mut">Username: <b>${esc(user.id)}</b></p>
+    <div class="stats">${[['Likes',p.likes],['Saved',p.saves],['Comments',p.comments],['Following',p.following.length]].map(([a,b])=>`<div><b>${b}</b><small class="mut">${a}</small></div>`).join('')}</div>
+    <h3>Following</h3>${p.following.map((f,i)=>`<div class="row"><span>@${esc(f.name)} <small class="mut">${SRC[f.source]}</small></span><button class="btn s" data-u="${i}">Unfollow</button></div>`).join('')||'<p class="mut">No one yet. Tap Follow on a video.</p>'}
+    <p><a class="btn s" href="#settings">Edit display name</a></p></div>`;
+    v.onclick=async e=>{const i=e.target.dataset.u;if(i!==undefined){try{await api('/follow',{method:'POST',body:p.following[i]});profile()}catch(x){toast(x.message)}}};
+  }catch(e){if(e.status===401){user=null;profile()}else v.innerHTML=`<div class="page"><p>${esc(e.message)}</p></div>`}
+}
+async function toggleAdult(el){
+  try{if(el.checked&&!confirm('Show sexually explicit videos? Only continue if you are 18 or older and this is legal where you live.')){el.checked=false;return}
+    const r=await api('/me',{method:'PUT',body:{adult:el.checked}});user=r.user;if(!user.adult_on)delete sessionStorage.rs_18;renderNav();toast(user.adult_on?'18+ tab enabled':'18+ tab hidden')}
+  catch(e){el.checked=!el.checked;toast(e.message)}
+}
+function adultGate(){
+  const m=$('#modal'),close=()=>{m.className='';m.innerHTML=''};m.className='open';
+  m.innerHTML='<div class="md"><h2 style="margin:0">18+ content</h2><p class="mut" style="margin:0">This section has sexually explicit videos from a third party. Continue only if you are 18 or older and it is legal where you live.</p><button class="btn" id="y18">I’m 18 or older, continue</button><button class="btn s" id="n18">Go back</button></div>';
+  $('#y18').onclick=()=>{sessionStorage.rs_18=1;close();startFeed('adult')};$('#n18').onclick=()=>{close();location.hash='#home'};
+}
+function settings(){
+  const v=$('#view'),row=(l,c,h='')=>`<div class="row"><div><div>${l}</div>${h?`<small class="mut">${h}</small>`:''}</div>${c}</div>`;
+  const ck=k=>`<input type="checkbox" data-p="${k}"${prefs[k]?' checked':''}>`;
+  const adultRow=()=>!user?row('18+ videos','<span class="mut">Log in first</span>','Needs an account with your birthday on file.')
+    :!user.has_dob?`<div class="row" style="display:block"><div>18+ videos</div><small class="mut">Enter your birthday to continue. It can only be set once.</small><div class="in"><input type="date" id="bd" max="${new Date().toISOString().slice(0,10)}"><button class="btn s" id="sb">Save</button></div></div>`
+    :!user.adult_ok?row('18+ videos','<span class="mut">Unavailable</span>','You must be 18 or older.')
+    :row('Show 18+ videos',`<input type="checkbox" id="ad"${user.adult_on?' checked':''}>`,'Adds an 18+ tab with explicit videos from Pornhub. You confirm again each session.');
+  v.innerHTML=`<div class="page set"><h2>Settings</h2>
+  ${row('Theme',`<select data-p="theme"><option value="dark">Dark</option><option value="light">Light</option></select>`)}
+  ${row('Start videos muted',ck('muted'),'Browsers block autoplay with sound until you tap.')}
+  ${row('Autoplay',ck('autoplay'),'Off: tap a video to play it.')}
+  <div class="row" style="display:block"><div>Content categories</div><small class="mut">None selected shows everything.</small><div class="chips" style="flex-wrap:wrap;margin-top:8px">${CATS.map(c=>`<button class="chip${prefs.cats.includes(c)?' on':''}" data-c="${c}">${c[0].toUpperCase()+c.slice(1)}</button>`).join('')}</div></div>
+  ${row('Video language',`<select data-p="lang">${Object.entries(LANGS).map(([k,n])=>`<option value="${k}">${n}</option>`).join('')}</select>`,'Applies to YouTube results only. The app itself is English.')}
+  ${row('Age-appropriate mode',`<select data-p="maturity"><option value="teen">Teen (mask mild profanity)</option><option value="adult">Adult</option></select>`,'Controls profanity masking in comments. 18+ videos are a separate setting below.')}
+  ${adultRow()}
+  ${row('Save my watch history',ck('history'),'Used to avoid repeats across sessions.')}
+  ${user?`${row('Clear watch history','<button class="btn s" id="ch">Clear</button>')}${row('Display name',`<input id="dn" maxlength="30" value="${esc(user.display_name)}"><button class="btn s" id="sn">Save</button>`,'Your ID: '+esc(user.id))}${row('Log out','<button class="btn s" id="lo2">Log out</button>')}${row('Delete account and data','<button class="btn s" id="del">Delete</button>')}`:row('Account','<button class="btn" id="li">Log in or sign up</button>')}
+  </div>`;
+  document.querySelectorAll('select[data-p]').forEach(s=>s.value=prefs[s.dataset.p]);
+  v.onchange=e=>{if(e.target.id==='ad')return toggleAdult(e.target);const k=e.target.dataset.p;if(!k)return;prefs[k]=e.target.type==='checkbox'?e.target.checked:e.target.value;savePrefs()};
+  v.onclick=async e=>{const t=e.target,c=t.dataset.c;
+    if(c){prefs.cats=prefs.cats.includes(c)?prefs.cats.filter(x=>x!==c):[...prefs.cats,c];t.classList.toggle('on');savePrefs()}
+    try{
+      if(t.id==='sb'){const b=$('#bd').value;if(!b)return toast('Pick your birthday');if(!confirm('Your birthday cannot be changed after you save it. Continue?'))return;
+        const r=await api('/me',{method:'PUT',body:{birthday:b}});user=r.user;toast(user.adult_ok?'Birthday saved':'Birthday saved. 18+ videos are unavailable.');settings()}
+      if(t.id==='li')openAuth();
+      if(t.id==='lo2')logout();
+      if(t.id==='ch'){await api('/history',{method:'DELETE'});seen=[];sessionStorage.rs_seen='[]';toast('History cleared')}
+      if(t.id==='sn'){const r=await api('/me',{method:'PUT',body:{display_name:$('#dn').value}});user=r.user;toast('Name saved')}
+      if(t.id==='del'&&confirm('Delete your account and all its data? This cannot be undone.')){await api('/me',{method:'DELETE'});logout();location.hash='#home'}
+    }catch(x){toast(x.message)}};
+}
+
+/* ---------- Admin panel ---------- */
+async function admin(){
+  const v=$('#view');if(!user?.admin){location.hash='#home';return}
+  const tabs=['overview','users','reports','comments'],when=t=>t?new Date(t).toLocaleString():'';
+  let tab=sessionStorage.rs_at||'overview',q='',off=0;
+  const vlink=id=>{const[k,x]=id.split(':');return k==='yt'?'https://www.youtube.com/watch?v='+x:k==='archive'?'https://archive.org/details/'+x:k==='ph'?'https://www.pornhub.com/view_video.php?viewkey='+x:'https://commons.wikimedia.org/?curid='+x};
+  const col=h=>`<div style="display:flex;flex-direction:column;gap:6px">${h}</div>`,bt=(a,l,d='')=>`<button class="btn s" data-a="${a}" ${d}>${l}</button>`;
+  const render=async()=>{
+    v.innerHTML=`<div class="page set"><h2 style="margin:0 0 10px">Admin panel</h2><div class="chips" style="margin-bottom:12px;flex-wrap:wrap">${tabs.map(t=>`<button class="chip${t===tab?' on':''}" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div><div id="ab"><div class="spin" style="margin:30px auto"></div></div></div>`;
+    const b=$('#ab');
+    try{
+      if(tab==='overview'){const o=await api('/admin/overview');b.innerHTML=`<div class="stats">${[['Users',o.users],['Banned',o.banned],['Reported videos',o.reported]].map(([a,n])=>`<div><b>${n}</b><small class="mut">${a}</small></div>`).join('')}</div><p class="mut">Use Users to ban or unban accounts and reset birthdays. Reports and Comments hold things people flagged.</p>`}
+      else if(tab==='users'){
+        const r=await api(`/admin/users?q=${encodeURIComponent(q)}&off=${off}`);
+        b.innerHTML=`<div class="in"><input id="uq" placeholder="User ID prefix or exact email" value="${esc(q)}"><button class="btn" id="us">Search</button></div>`+
+        (r.users.map(u=>{const d=`data-id="${esc(u.id)}"`;return`<div class="row" style="align-items:flex-start"><div><b>${esc(u.id)}</b>${u.admin?' <small class="mut">(admin)</small>':''}<br><small class="mut">${esc(u.email)} · ${esc(u.display_name)}<br>Age: ${u.age_group||'not set'}${u.adult_on?' · 18+ on':''} · Joined ${when(u.created)}</small>${u.ban?`<br><small style="color:var(--acc)">Banned ${u.ban.until?'until '+when(u.ban.until):'permanently'}${u.ban.reason?': '+esc(u.ban.reason):''}</small>`:''}</div>${col((u.admin?'':u.ban?bt('unban','Unban',d):bt('ban','Ban',d))+(u.age_group?bt('rbd','Reset birthday',d):''))}</div>`}).join('')||'<p class="mut">No users found.</p>')+
+        `<p class="mut">${r.total} total${r.next!==null?` · <a href="#admin" data-more="${r.next}">Next page</a>`:''}</p>`;
+      }else if(tab==='reports'){
+        const r=await api('/admin/reports');
+        b.innerHTML=r.reports.map(x=>{const d=`data-id="${esc(x.id)}"`;return`<div class="row"><div><a href="${esc(vlink(x.id))}" target="_blank" rel="noopener noreferrer">${esc(x.id)}</a><br><small class="mut">${x.count} report(s) · ${when(x.t)}${x.blocked?' · BLOCKED':''}</small></div>${col(bt(x.blocked?'vunblock':'vblock',x.blocked?'Unblock':'Block video',d)+(x.blocked?'':bt('vdismiss','Dismiss',d)))}</div>`}).join('')||'<p class="mut">No reported videos.</p>';
+      }else{
+        const r=await api('/admin/comments');
+        b.innerHTML=r.comments.map(c=>{const d=`data-k="${esc(c.key)}" data-cid="${c.cid}"`;return`<div class="row" style="align-items:flex-start"><div><b>${esc(c.name)}</b> <small class="mut">${esc(c.uid)} · ${c.reports} report(s)${c.hidden?' · hidden':''}</small><p style="margin:4px 0">${esc(c.text)}</p></div>${col((c.hidden?bt('cshow','Restore',d):bt('chide','Hide',d))+bt('cdel','Delete',d)+bt('ban','Ban user',`data-id="${esc(c.uid)}"`))}</div>`}).join('')||'<p class="mut">No flagged comments.</p>';
+      }
+    }catch(e){b.textContent=e.message}
+  };
+  v.onclick=async e=>{const t=e.target,a=t.dataset.a,id=t.dataset.id,post=(p,body)=>api(p,{method:'POST',body}).then(()=>render());
+    try{
+      if(t.dataset.t){tab=t.dataset.t;sessionStorage.rs_at=tab;q='';off=0;return render()}
+      if(t.id==='us'){q=$('#uq').value;off=0;return render()}
+      if(t.dataset.more){e.preventDefault();off=+t.dataset.more;return render()}
+      if(a==='ban'){const reason=prompt('Reason (shown to the user):','');if(reason===null)return;const days=prompt('Days (0 = permanent):','0');if(days===null)return;await post('/admin/ban',{id,reason,days:+days||0});toast('Banned '+id)}
+      else if(a==='unban'){await post('/admin/unban',{id});toast('Unbanned')}
+      else if(a==='rbd'){if(confirm('Clear this user’s birthday? They will have to enter it again and adult access turns off.')){await post('/admin/reset-birthday',{id});toast('Birthday reset')}}
+      else if(a==='vblock'||a==='vunblock'||a==='vdismiss'){await post('/admin/video',{id,action:a.slice(1)})}
+      else if(a==='chide'||a==='cshow'||a==='cdel'){if(a==='cdel'&&!confirm('Delete this comment?'))return;await post('/admin/comment',{key:t.dataset.k,cid:t.dataset.cid,action:a==='cdel'?'delete':a.slice(1)})}
+    }catch(x){toast(x.message)}};
+  render();
+}
+
+/* ---------- Router ---------- */
+const NAV0=[['home','home','Home'],['explore','compass','Explore'],['following','users','Following'],['favorites','mark','Favorites'],['profile','user','Profile'],['settings','set','Settings']];
+function renderNav(){const L=[...NAV0];if(user?.adult_on)L.splice(4,0,['adult','lock','18+']);if(user?.admin)L.push(['admin','shield','Admin']);
+  $('#nav').innerHTML=L.map(([h,i,l])=>`<a href="#${h}">${ic(i)}<span>${l}</span></a>`).join('');
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.hash===(location.hash||'#home')))}
+const R={home:()=>startFeed('home'),explore:()=>startFeed('explore'),following:()=>startFeed('following'),favorites:()=>startFeed('favorites'),profile,settings,admin,
+  adult:()=>{if(!user?.adult_on){toast('Turn on 18+ videos in Settings first');location.hash='#settings';return}sessionStorage.rs_18?startFeed('adult'):adultGate()}};
+function route(){
+  const k=R[(location.hash||'#home').slice(1)]?location.hash.slice(1):'home';
+  stopFeed();const v=$('#view');v.onclick=v.onchange=null;renderNav();
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.hash==='#'+k));
+  R[k]();
+}
+addEventListener('hashchange',route);
+document.documentElement.dataset.theme=prefs.theme;
+(async()=>{if(token)try{setUser(await api('/me'))}catch(e){if(e.status===401||e.status===403){token=null;delete localStorage.rs_token}}route()})();
+</script></body></html>
