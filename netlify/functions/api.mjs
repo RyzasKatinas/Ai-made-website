@@ -37,7 +37,9 @@ const banIndex=async(id,ban)=>{const A=S('admin'),ix=(await A.get('bans',{type:'
 const adultOK=u=>!!u&&!!u.dob&&ageOf(u.dob)>=18&&!isBanned(u);   // 18+ with a birthday on file
 const adultOn=u=>adultOK(u)&&!!u.adult_on;                          // ...and opted in
 const gate=(u,id)=>{if(String(id).startsWith('ph:')&&!adultOn(u))throw new E('18+ content is not enabled on this account',403)};
-const pub=u=>({id:u.id,display_name:u.display_name,prefs:u.prefs,admin:isAdmin(u),has_dob:!!u.dob,adult_ok:adultOK(u),adult_on:adultOn(u)});
+const pub=u=>({id:u.id,display_name:u.display_name,prefs:u.prefs,admin:isAdmin(u),has_dob:!!u.dob,adult_ok:adultOK(u),adult_on:adultOn(u),badge:!!u.badge});
+const iph=ip=>mac('ip:'+ip).slice(0,24);   // keyed hash, raw IPs are never stored
+const ipBlocked=async ip=>{const r=await S('admin').get('ipban/'+iph(ip),{type:'json'});return!!r&&(!r.until||r.until>Date.now())};
 async function limit(kind,ip,max,secs){const s=S('ratelimit'),k=`${kind}/${ip}/${Math.floor(Date.now()/1e3/secs)}`;const n=(await s.get(k,{type:'json'}))||0;if(n>=max)throw new E('Too many requests, slow down',429);await s.setJSON(k,n+1)}
 
 /* ---- video helpers ---- */
@@ -101,6 +103,7 @@ async function phub(){
 const R={
 'POST /register':async({body,ip})=>{
   if(!SECRET)throw new E('Server is missing JWT_SECRET',500);await limit('auth',ip,20,3600);
+  if(await ipBlocked(ip))throw new E('Sign-ups are blocked from your network',403);
   const{email,password,birthday}=body;
   if(typeof email!=='string'||!/^\S+@\S+\.\S+$/.test(email)||email.length>120||typeof password!=='string'||password.length<8||password.length>100)throw new E('Enter a valid email and a password of 8+ characters');
   if(!validDob(birthday))throw new E('Enter your date of birth');if(ageOf(birthday)<13)throw new E('You must be at least 13 to create an account');
@@ -108,7 +111,7 @@ const R={
   if(await us.get('e/'+e))throw new E('That email is already registered',409);
   let id;do{id='User_'+crypto.randomInt(100000,1000000)}while(await us.get('u/'+id));
   const salt=crypto.randomBytes(16).toString('hex');
-  const u={id,email:e,dob:birthday,salt,pass:hashpw(password,salt),display_name:id,prefs:{},likes:[],saves:[],follows:[],seen:[],ncomments:0,created:Date.now()};
+  const u={id,email:e,dob:birthday,ip:iph(ip),salt,pass:hashpw(password,salt),display_name:id,prefs:{},likes:[],saves:[],follows:[],seen:[],ncomments:0,created:Date.now()};
   await us.setJSON('u/'+id,u);await us.setJSON('e/'+e,{id});
   return{token:sign(id),user:pub(u)}},
 'POST /login':async({body,ip})=>{
@@ -118,8 +121,9 @@ const R={
   const u=id&&await getUser(id);
   if(!u||typeof body.password!=='string'||!crypto.timingSafeEqual(Buffer.from(hashpw(body.password,u.salt)),Buffer.from(u.pass)))throw new E('Wrong ID/email or password',401);
   if(isBanned(u))throw new E(banMsg(u),403);
+  if(u.ip!==iph(ip)){u.ip=iph(ip);await putUser(u)}
   return{token:sign(u.id),user:pub(u)}},
-'GET /me':async({uid})=>({user:pub(await needUser(uid))}),
+'GET /me':async({uid})=>{const u=await needUser(uid),notice=u.notice;if(notice){delete u.notice;await putUser(u)}return{user:pub(u),notice}},
 'PUT /me':async({uid,body})=>{const u=await needUser(uid);
   if(body.display_name!==undefined){const n=String(body.display_name).trim().replace(/\s+/g,' ');if(!n||n.length>30||STRONG.test(n))throw new E('Display name must be 1–30 clean characters');u.display_name=n}
   if(body.prefs!==undefined){if(!body.prefs||typeof body.prefs!=='object'||Array.isArray(body.prefs)||JSON.stringify(body.prefs).length>2000)throw new E('Invalid preferences');u.prefs=body.prefs}
@@ -130,7 +134,8 @@ const R={
   for(const{key}of(await C.list()).blobs){const d=await C.get(key,{type:'json'}),f=d.filter(c=>c.uid!==u.id);if(f.length!==d.length)await C.setJSON(key,f)}
   await S('users').delete('u/'+u.id);await S('users').delete('e/'+u.email);return{ok:true}},
 'DELETE /history':async({uid})=>{const u=await needUser(uid);u.seen=[];await putUser(u);return{ok:true}},
-'GET /profile':async({uid})=>{const u=await needUser(uid);return{likes:u.likes.length,saves:u.saves.length,comments:u.ncomments||0,following:u.follows}},
+'GET /profile':async({uid})=>{const u=await needUser(uid),b=u.boost||{};return{likes:u.likes.length+(b.likes||0),saves:u.saves.length,comments:u.ncomments||0,following:u.follows,following_count:u.follows.length+(b.following||0),followers:b.followers||0,uploads:(u.uploads||[]).length}},
+'GET /uploads':async({uid})=>{const u=await needUser(uid),list=[...(u.uploads||[])].reverse(),st=await statsFor(list.map(v=>v.id));return{videos:list.map(v=>decorate(v,st[v.id],u))}},
 
 'GET /feed':async({url,uid})=>{
   const q=url.searchParams,mode=['random','trending','following','adult'].includes(q.get('mode'))?q.get('mode'):'random';
@@ -165,8 +170,10 @@ const R={
   u.follows=has?u.follows.filter(x=>!(x.source===f.source&&x.cid===f.cid)):[...u.follows.slice(-199),f];await putUser(u);return{on:!has}},
 'POST /report':async({uid,body})=>{const u=await needUser(uid),id=vidId(body);gate(u,id);
   const RP=S('reports'),k=`${h(id)}/${u.id}`;if(await RP.get(k))return{ok:true};
-  await RP.setJSON(k,{id,t:Date.now()});await bump(id,d=>{d.reports=(d.reports||0)+1});
-  const A=S('admin'),ix=(await A.get('reported',{type:'json'}))||{},e=ix[h(id)]||{id,count:0};e.count++;e.t=Date.now();ix[h(id)]=e;await A.setJSON('reported',ix);return{ok:true}},
+  const reason=['Spam or scam','Sexual content','Violence or gore','Hate or harassment','Other'].includes(body.reason)?body.reason:'Other';
+  let meta={};try{const c=cleanVideo({...body.video,id});meta={title:c.title,creator:c.creator,source:c.source}}catch{}
+  await RP.setJSON(k,{id,t:Date.now(),reason});await bump(id,d=>{d.reports=(d.reports||0)+1});
+  const A=S('admin'),ix=(await A.get('reported',{type:'json'}))||{},e=ix[h(id)]||{id,count:0,reasons:{}};Object.assign(e,meta);e.reasons=e.reasons||{};e.reasons[reason]=(e.reasons[reason]||0)+1;e.count++;e.t=Date.now();ix[h(id)]=e;await A.setJSON('reported',ix);return{ok:true}},
 
 'GET /comments':async({url,uid})=>{const id=vidId({id:url.searchParams.get('id')}),u=await getUser(uid),adult=u?.prefs.maturity==='adult';gate(u,id);
   const d=(await S('comments').get('c/'+h(id),{type:'json'}))||[];
@@ -186,18 +193,40 @@ const R={
 'GET /admin/overview':async({uid})=>{await needAdmin(uid);const A=S('admin'),bans=(await A.get('bans',{type:'json'}))||{},rep=(await A.get('reported',{type:'json'}))||{};
   return{users:(await S('users').list({prefix:'u/'})).blobs.length,banned:Object.values(bans).filter(b=>!b.until||b.until>Date.now()).length,reported:Object.values(rep).filter(r=>!r.blocked).length}},
 'GET /admin/users':async({uid,url})=>{await needAdmin(uid);
-  const q=(url.searchParams.get('q')||'').trim().slice(0,120),off=Math.max(0,+url.searchParams.get('off')||0);let ids;
-  if(q.includes('@')){const r=await S('users').get('e/'+q.toLowerCase(),{type:'json'});ids=r?[r.id]:[]}
-  else ids=(await S('users').list({prefix:'u/'+q})).blobs.map(b=>b.key.slice(2));
+  const q=(url.searchParams.get('q')||'').trim().slice(0,120),L=q.toLowerCase(),off=Math.max(0,+url.searchParams.get('off')||0);let ids;
+  if(url.searchParams.get('banned')==='1'){const ix=(await S('admin').get('bans',{type:'json'}))||{};ids=Object.entries(ix).filter(([,b])=>!b.until||b.until>Date.now()).map(([id])=>id)}
+  else{
+    if(q.includes('@')){const r=await S('users').get('e/'+L,{type:'json'});if(r)ids=[r.id]}
+    if(!ids){const all=(await S('users').list({prefix:'u/'})).blobs.map(b=>b.key.slice(2));ids=q?all.filter(i=>i.toLowerCase().startsWith(L)):all;
+      if(q&&!ids.length)ids=(await Promise.all(all.slice(0,400).map(getUser))).filter(u=>u&&(u.display_name.toLowerCase().includes(L)||String(u.email).includes(L))).map(u=>u.id)}}
   const page=ids.slice(off,off+25),users=(await Promise.all(page.map(getUser))).filter(Boolean).map(u=>({id:u.id,email:u.email,display_name:u.display_name,created:u.created,admin:isAdmin(u),adult_on:adultOn(u),
-    age_group:u.dob?(ageOf(u.dob)>=18?'18+':'under 18'):null,ban:isBanned(u)?u.ban:null}));
+    age_group:u.dob?(ageOf(u.dob)>=18?'18+':'under 18'):null,ban:isBanned(u)?u.ban:null,badge:!!u.badge,boost:u.boost||{},uploads:(u.uploads||[]).length}));
   return{users,total:ids.length,next:off+25<ids.length?off+25:null}},
 'POST /admin/ban':async({uid,body})=>{const a=await needAdmin(uid);if(!/^User_\d+$/.test(String(body.id)))throw new E('Invalid user id');
   const t=await getUser(body.id);if(!t)throw new E('User not found',404);if(isAdmin(t))throw new E('Admins cannot be banned',403);
-  const days=Math.max(0,Math.min(3650,+body.days||0));t.ban={reason:String(body.reason||'').slice(0,200),by:a.id,t:Date.now(),until:days?Date.now()+days*864e5:0};
-  await putUser(t);await banIndex(t.id,t.ban);return{ok:true}},
-'POST /admin/unban':async({uid,body})=>{await needAdmin(uid);const t=await getUser(String(body.id));if(!t)throw new E('User not found',404);delete t.ban;await putUser(t);await banIndex(t.id,null);return{ok:true}},
+  const days=Math.max(0,Math.min(3650,+body.days||0)),until=days?Date.now()+days*864e5:0;
+  t.ban={reason:String(body.reason||'').slice(0,200),by:a.id,t:Date.now(),until};
+  let ip=false;if(body.ip&&t.ip){await S('admin').setJSON('ipban/'+t.ip,{id:t.id,t:Date.now(),until});ip=true}
+  await putUser(t);await banIndex(t.id,t.ban);return{ok:true,ip}},
+'POST /admin/unban':async({uid,body})=>{await needAdmin(uid);const t=await getUser(String(body.id));if(!t)throw new E('User not found',404);
+  delete t.ban;await putUser(t);await banIndex(t.id,null);if(t.ip)await S('admin').delete('ipban/'+t.ip);return{ok:true}},
 'POST /admin/reset-birthday':async({uid,body})=>{await needAdmin(uid);const t=await getUser(String(body.id));if(!t)throw new E('User not found',404);delete t.dob;t.adult_on=false;await putUser(t);return{ok:true}},
+'POST /admin/troll':async({uid,body})=>{await needAdmin(uid);const t=await getUser(String(body.id));if(!t)throw new E('User not found',404);
+  const n=x=>Math.max(-1e9,Math.min(1e9,Math.trunc(+x||0)));if(body.reset)t.boost={};const b=t.boost=t.boost||{};
+  for(const k of['followers','following','likes'])if(n(body[k]))b[k]=Math.max(0,Math.min(1e9,(b[k]||0)+n(body[k])));
+  if(body.badge!==undefined)t.badge=!!body.badge;
+  const nm=String(body.name||'').trim().replace(/\s+/g,' ').slice(0,30);if(nm)t.display_name=nm;
+  const nt=String(body.notice||'').trim().slice(0,200);if(nt)t.notice=nt;
+  await putUser(t);return{ok:true,boost:b}},
+'POST /admin/fake-upload':async({uid,body})=>{await needAdmin(uid);const t=await getUser(String(body.id));if(!t)throw new E('User not found',404);
+  const count=Math.max(1,Math.min(5,+body.count||1)),cat=pick(Object.keys(TOPICS)),topic=pick(TOPICS[cat]);
+  const jobs=[commons({q:topic}),archive({q:topic}),YT&&youtube({q:topic,cat,lang:'en-US'})].filter(Boolean);
+  const pool=shuffle((await Promise.allSettled(jobs)).flatMap(r=>r.status==='fulfilled'?r.value:[])).filter(v=>ID.test(v.id)&&!BAD.test(v.title));
+  const have=new Set((t.uploads||[]).map(v=>v.id)),added=[];
+  for(const v of pool){if(added.length>=count)break;if(have.has(v.id))continue;
+    try{const c={...cleanVideo(v),creator:t.display_name.slice(0,100),cid:t.id};added.push(c);have.add(c.id);await bump(c.id,d=>{d.views+=500+rnd(50000);d.likes+=10+rnd(3000)})}catch{}}
+  if(!added.length)throw new E('Could not fetch a video right now, try again',502);
+  t.uploads=[...(t.uploads||[]),...added].slice(-50);await putUser(t);return{ok:true,added:added.length}},
 'GET /admin/reports':async({uid})=>{await needAdmin(uid);const ix=(await S('admin').get('reported',{type:'json'}))||{};return{reports:Object.values(ix).sort((a,b)=>b.t-a.t).slice(0,100)}},
 'POST /admin/video':async({uid,body})=>{await needAdmin(uid);const id=vidId(body),A=S('admin'),ix=(await A.get('reported',{type:'json'}))||{},k=h(id),a=body.action;
   if(a==='block'||a==='unblock'){await bump(id,d=>{d.blocked=a==='block'});ix[k]={...(ix[k]||{id,count:0,t:Date.now()}),blocked:a==='block'}}
